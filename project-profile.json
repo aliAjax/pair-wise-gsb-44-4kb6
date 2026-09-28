@@ -1,0 +1,11 @@
+{
+  "projectId": "pair-wise-gsb-44",
+  "projectName": "pair-wise-gsb-44",
+  "category": "地狱 Python 项目",
+  "businessDomain": "隐私合规",
+  "projectForm": "完整项目",
+  "codeScope": "backend, frontend",
+  "languages": ["Python", "HTML", "CSS", "JavaScript"],
+  "summary": "跨地区个人数据权利请求、时限管理、数据定位、处置和审计时间线系统。",
+  "containerized": false
+}
