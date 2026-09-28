@@ -1,6 +1,66 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>个人数据权利请求</title>
-<style>body{font:15px/1.6 system-ui,sans-serif;max-width:1180px;margin:28px auto;padding:0 20px;color:#263842}table{border-collapse:collapse;width:100%;margin:14px 0}th,td{border:1px solid #d4dde2;padding:7px}th{background:#eef5f5}.card{background:#eef8f7;border-left:5px solid #2d827b;padding:12px 16px}code{background:#edf1f2;padding:2px 5px}.overdue{color:#a11b1b;font-weight:600}</style>
-<h1>个人数据权利请求处理</h1><div class="card">请求和位置按角色过滤。页面不展示联系方式明文。写接口需要 <code>X-User</code>、<code>X-Role</code>，详见 README。</div>
-<h2>处理队列</h2><table id="requests"><thead><tr><th>请求号</th><th>类型</th><th>地区</th><th>状态</th><th>到期日</th><th>处理人</th></tr></thead><tbody></tbody></table>
-<h2>数据定位</h2><table id="locations"><thead><tr><th>请求</th><th>系统</th><th>类别</th><th>状态</th><th>法律保留</th></tr></thead><tbody></tbody></table>
-<script>async function load(){const d=await fetch('/api/state').then(r=>r.json());document.querySelector('#requests tbody').innerHTML=d.requests.map(r=>`<tr class="${r.overdue?'overdue':''}"><td>${r.request_no}</td><td>${r.request_type}</td><td>${r.jurisdiction}</td><td>${r.status}</td><td>${r.due_date}</td><td>${r.assigned_to||''}</td></tr>`).join('');document.querySelector('#locations tbody').innerHTML=d.locations.map(r=>`<tr><td>${r.request_id}</td><td>${r.system_name}</td><td>${r.data_category}</td><td>${r.status}</td><td>${r.legal_hold?'是':'否'}</td></tr>`).join('')}load()</script></html>
+<style>
+body{font:15px/1.6 system-ui,sans-serif;max-width:1180px;margin:28px auto;padding:0 20px;color:#263842}
+table{border-collapse:collapse;width:100%;margin:14px 0}
+th,td{border:1px solid #d4dde2;padding:7px}th{background:#eef5f5}
+.card{background:#eef8f7;border-left:5px solid #2d827b;padding:12px 16px}
+code{background:#edf1f2;padding:2px 5px}
+.overdue{color:#a11b1b;font-weight:600}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px}
+.tag-draft{background:#fdf0d5;color:#8a5a00}.tag-active{background:#dff3e3;color:#1f6b34}
+.tag-superseded{background:#e7eaec;color:#5b6b73}.tag-withdrawn{background:#f7dede;color:#8a2b2b}
+.muted{color:#6c7a82;font-size:13px}#detail{background:#f7fafa;border:1px solid #cfe0e2;padding:16px;margin-top:18px}
+#detail[hidden]{display:none}
+</style>
+<h1>个人数据权利请求处理</h1>
+<div class="card">新案件只采用<strong>已生效</strong>的地区规则版本；已建案件始终按受理时绑定的版本判断延期与重算。草案到生效时间后自动发布，已发布版本不可修改，补正须带原因生成新版本。</div>
+<h2>处理队列</h2>
+<table id="requests"><thead><tr><th>请求号</th><th>类型</th><th>地区</th><th>状态</th><th>原到期日</th><th>当前到期日</th><th>规则版本</th><th>处理人</th></tr></thead><tbody></tbody></table>
+<h2>地区规则版本</h2>
+<table id="rules"><thead><tr><th>地区</th><th>版本</th><th>状态</th><th>响应天数</th><th>延期上限</th><th>生效时间</th><th>补正原因</th></tr></thead><tbody></tbody></table>
+<h2>数据定位</h2>
+<table id="locations"><thead><tr><th>请求</th><th>系统</th><th>类别</th><th>状态</th><th>法律保留</th></tr></thead><tbody></tbody></table>
+<div id="detail" hidden></div>
+<p class="muted">点击请求号查看详情：案件采用的规则版本、原到期日与每次规则变更。写接口需要 <code>X-User</code>、<code>X-Role</code>，详见 README。</p>
+<script>
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tag = s => `<span class="tag tag-${s}">${({draft:'草案',active:'生效中',superseded:'已替换',withdrawn:'已撤回'})[s]||s}</span>`;
+async function load(){
+  const d = await fetch('/api/state').then(r=>r.json());
+  document.querySelector('#requests tbody').innerHTML = d.requests.map(r=>
+    `<tr class="${r.overdue?'overdue':''}"><td><a href="#" onclick="show(${r.id});return false">${esc(r.request_no)}</a></td>`+
+    `<td>${esc(r.request_type)}</td><td>${esc(r.jurisdiction)}</td><td>${esc(r.status)}</td>`+
+    `<td>${esc(r.original_due_date)}</td><td>${esc(r.due_date)}</td>`+
+    `<td>v${r.rule_version_no||'-'} ${r.rule_status?tag(r.rule_status):''}</td><td>${esc(r.assigned_to||'')}</td></tr>`).join('');
+  document.querySelector('#rules tbody').innerHTML = (d.rule_versions||[]).map(v=>
+    `<tr><td>${esc(v.code)}</td><td>v${v.version_no}</td><td>${tag(v.status)}</td>`+
+    `<td>${v.response_days}</td><td>${v.max_extension_days}</td><td>${esc(v.effective_at)}</td>`+
+    `<td>${esc(v.change_reason||'')} ${v.status==='draft'?'<span class="muted">（未生效，可撤回）</span>':''}</td></tr>`).join('');
+  document.querySelector('#locations tbody').innerHTML = d.locations.map(r=>
+    `<tr><td>${r.request_id}</td><td>${esc(r.system_name)}</td><td>${esc(r.data_category)}</td>`+
+    `<td>${esc(r.status)}</td><td>${r.legal_hold?'是':'否'}</td></tr>`).join('');
+}
+async function show(id){
+  const d = await fetch('/api/requests/'+id).then(r=>r.json());
+  const r = d.request, rv = d.rule_version||{};
+  const changes = (d.rule_changes||[]).map(v=>
+    `<tr><td>v${v.version_no}</td><td>${tag(v.status)}</td><td>${v.response_days}</td><td>${v.max_extension_days}</td>`+
+    `<td>${esc(v.effective_at)}</td><td>${esc(v.published_at||'')}</td><td>${esc(v.change_reason||'')}</td></tr>`).join('');
+  const events = (d.timeline||[]).map(t=>{
+    let detail={}; try{detail=JSON.parse(t.details)}catch(e){}
+    const rule = detail.rule_version_no?` <span class="muted">依据规则 v${detail.rule_version_no}</span>`:'';
+    return `<tr><td>${esc(t.created_at)}</td><td>${esc(t.actor)}</td><td>${esc(t.action)}${rule}</td>`+
+           `<td><code>${esc(t.details)}</code></td></tr>`;
+  }).join('');
+  document.querySelector('#detail').hidden=false;
+  document.querySelector('#detail').innerHTML =
+    `<h2>请求 ${esc(r.request_no)} 详情</h2>`+
+    `<div class="card">状态：${esc(r.status)}　受理时间：${esc(r.submitted_at)}<br>`+
+    `<strong>原到期日：${esc(r.original_due_date)}</strong>　当前到期日：${esc(r.due_date)}　已延期：${r.extension_days} 天<br>`+
+    `采用规则：${esc(r.jurisdiction)} <strong>v${rv.version_no||'-'}</strong>（生效于 ${esc(rv.effective_at||'')}，`+
+    `响应 ${rv.response_days||'-'} 天 / 延期上限 ${rv.max_extension_days||'-'} 天）</div>`+
+    `<h3>规则变更历史</h3><table><thead><tr><th>版本</th><th>状态</th><th>响应天数</th><th>延期上限</th><th>生效时间</th><th>发布时间</th><th>补正原因</th></tr></thead><tbody>${changes}</tbody></table>`+
+    `<h3>处理时间线</h3><table><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>详情</th></tr></thead><tbody>${events}</tbody></table>`;
+}
+load();
+</script></html>
